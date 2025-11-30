@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Sorteo Intercambio — GitHub Pages</title>
+  <style>
+    :root{font-family:Inter,system-ui,Segoe UI,Roboto,'Helvetica Neue',Arial;margin:0;color:#0f172a}
+    body{display:flex;align-items:center;justify-content:center;min-height:100vh;background:linear-gradient(180deg,#eef2ff,white);padding:24px}
+    .card{width:100%;max-width:720px;background:white;border-radius:12px;box-shadow:0 8px 30px rgba(2,6,23,0.08);padding:22px}
+    h1{margin:0 0 8px;font-size:20px}
+    p.lead{margin:0 0 18px;color:#475569}
+    label{display:block;font-weight:600;margin-top:10px}
+    input[type=text]{width:100%;padding:10px;border:1px solid #e6eef8;border-radius:8px;margin-top:6px}
+    button{margin-top:12px;padding:10px 14px;border-radius:10px;border:0;background:#2563eb;color:white;font-weight:600;cursor:pointer}
+    .result{margin-top:18px;padding:12px;border-radius:8px;background:#f8fafc}
+    .muted{color:#64748b;font-size:13px}
+    .admin{margin-top:18px;border-top:1px dashed #e6eef8;padding-top:14px}
+    .small{font-size:13px;color:#475569}
+    pre{background:#0b1220;color:#f8fafc;padding:10px;border-radius:8px;overflow:auto}
+    .error{color:#b91c1c;font-weight:700}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Sorteo Intercambio — GitHub Pages</h1>
+    <p class="lead">Ingresa tu nombre exactamente como aparece en la lista y presiona <strong>Sacar</strong>. Cada persona puede obtener su asignación <strong>una sola vez</strong> (se guarda en el navegador).</p>
+
+    <label for="nombre">Tu nombre</label>
+    <input id="nombre" type="text" placeholder="ej. reyes jovana" autocomplete="off" />
+    <button id="sacarBtn">Sacar</button>
+
+    <div id="salida" class="result" style="display:none"></div>
+
+    <div id="info" class="muted small" style="margin-top:12px">
+      <p><strong>Nota importante:</strong> Esta versión guarda las asignaciones en <em>localStorage</em>, es decir, en el navegador. Si quieres que las asignaciones sean <u>únicas y compartidas entre todos</u> (que nadie en otro navegador pueda elegir el mismo receptor), necesitarás un servidor o un backend (puedo ayudarte a desplegar uno si lo deseas).</p>
+    </div>
+
+    <div class="admin">
+      <details>
+        <summary style="cursor:pointer">Panel de administración (exportar / reset)</summary>
+        <div style="margin-top:12px">
+          <p class="small">Introduce la <em>clave de administrador</em> para desbloquear opciones.</p>
+          <input id="adminKey" type="text" placeholder="clave admin" />
+          <button id="unlockAdmin">Desbloquear</button>
+          <div id="adminArea" style="display:none;margin-top:12px">
+            <button id="exportJson">Exportar asignaciones (JSON)</button>
+            <button id="resetAll" style="background:#ef4444;margin-left:8px">Borrar todas las asignaciones</button>
+            <p class="small" style="margin-top:10px">Puedes copiar el JSON y guardarlo fuera (si quieres una "base de datos" manual). En una implementación con servidor esto sería automático.</p>
+            <pre id="exportBox" style="display:none"></pre>
+          </div>
+        </div>
+      </details>
+    </div>
+  </div>
+
+  <script>
+    // PARTICIPANTES: nombre (en minúsculas) y sucursal exacta
+    const participantes = [
+      {nombre: 'fatima judith', sucursal: 'Tula'},
+      {nombre: 'reyes jovana', sucursal: 'Tula'},
+      {nombre: 'alfredo javier', sucursal: 'Tula'},
+      {nombre: 'coraima guadalupe', sucursal: 'Tula'},
+      {nombre: 'cañedo angel', sucursal: 'Tula'},
+
+      {nombre: 'rocio michelle', sucursal: 'ACTOPAN'},
+      {nombre: 'sandra jazmin', sucursal: 'ACTOPAN'},
+      {nombre: 'jose jesus', sucursal: 'ACTOPAN'},
+      {nombre: 'mical bautista', sucursal: 'ACTOPAN'},
+      {nombre: 'chistian yulemy', sucursal: 'ACTOPAN'},
+
+      {nombre: 'cruz gloria', sucursal: 'IXMIQUILPAN'},
+      {nombre: 'norma isela', sucursal: 'IXMIQUILPAN'},
+      {nombre: 'hernandez miriam', sucursal: 'IXMIQUILPAN'},
+      {nombre: 'wendy madeline', sucursal: 'IXMIQUILPAN'},
+
+      {nombre: 'maria del rosario', sucursal: 'MIXQUIAHUALA'},
+      {nombre: 'juarez daniela', sucursal: 'MIXQUIAHUALA'},
+      {nombre: 'ximena camacho', sucursal: 'MIXQUIAHUALA'},
+      {nombre: 'Aarlet serrano', sucursal: 'MIXQUIAHUALA'},
+
+      {nombre: 'anahi graciela', sucursal: 'Huehuetoca'},
+      {nombre: 'alondra martinez', sucursal: 'Huehuetoca'},
+      {nombre: 'lina mimbrera', sucursal: 'Huehuetoca'},
+      {nombre: 'luisa alexa', sucursal: 'Huehuetoca'},
+      {nombre: 'jocelyn martinez', sucursal: 'Huehuetoca'},
+
+      {nombre: 'alexis gomez', sucursal: 'Tepeji'},
+      {nombre: 'dulce jocelyn', sucursal: 'Tepeji'},
+      {nombre: 'becerra yelitza', sucursal: 'Tepeji'},
+      {nombre: 'nadia paola', sucursal: 'Tepeji'},
+      {nombre: 'raquel cruz', sucursal: 'Tepeji'}
+    ].map(p => ({nombre: p.nombre.trim(), sucursal: p.sucursal.trim()}));
+
+    // Key in localStorage
+    const STORAGE_KEY = 'sorteo_intercambio_asignaciones_v1';
+
+    function loadAsignaciones(){
+      try{
+        const raw = localStorage.getItem(STORAGE_KEY);
+        return raw ? JSON.parse(raw) : {};
+      }catch(e){
+        return {};
+      }
+    }
+    function saveAsignaciones(obj){
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(obj));
+    }
+
+    // Utilidades
+    function findParticipante(nombre){
+      if(!nombre) return null;
+      const n = nombre.trim();
+      return participantes.find(p => p.nombre.toLowerCase() === n.toLowerCase()) || null;
+    }
+
+    function asignarPara(nombre){
+      const p = findParticipante(nombre);
+      if(!p) return {error: 'Nombre no encontrado. Asegúrate de escribirlo exactamente como en la lista.'};
+
+      const asignaciones = loadAsignaciones();
+
+      // Si ya tiene asignación -> devolverla (OPCIÓN 1: solo una vez)
+      if(asignaciones[p.nombre]){
+        const recNombre = asignaciones[p.nombre];
+        const receptor = participantes.find(x => x.nombre === recNombre);
+        return {assigned: receptor};
+      }
+
+      // Construir lista de receptores válidos (no misma sucursal, no asignado ya, no él mismo)
+      const asignados = new Set(Object.values(asignaciones));
+      const posibles = participantes.filter(c => (
+        c.nombre !== p.nombre &&
+        c.sucursal !== p.sucursal &&
+        !asignados.has(c.nombre)
+      ));
+
+      if(posibles.length === 0){
+        return {error: 'No hay candidatos válidos en este momento. Pide al administrador que revise o reinicie el sorteo.'};
+      }
+
+      // Elegir aleatorio
+      const elegido = posibles[Math.floor(Math.random()*posibles.length)];
+      asignaciones[p.nombre] = elegido.nombre;
+      saveAsignaciones(asignaciones);
+      return {assigned: elegido};
+    }
+
+    // UI
+    const salida = document.getElementById('salida');
+    document.getElementById('sacarBtn').addEventListener('click', ()=>{
+      const nombre = document.getElementById('nombre').value.trim();
+      salida.style.display = '';
+      salida.innerHTML = 'Procesando...';
+
+      const res = asignarPara(nombre);
+      if(res.error){
+        salida.innerHTML = '<div class="error">' + res.error + '</div>';
+        return;
+      }
+
+      const receptor = res.assigned;
+      salida.innerHTML = `<strong>${nombre}</strong> → <strong>${receptor.nombre}</strong><br><span class="muted">Sucursal: ${receptor.sucursal}</span>`;
+    });
+
+    // admin
+    const ADMIN_PLAIN_KEY = 'admin123'; // CAMBIA ESTA CLAVE si subes a producción
+    document.getElementById('unlockAdmin').addEventListener('click', ()=>{
+      const val = document.getElementById('adminKey').value || '';
+      if(val === ADMIN_PLAIN_KEY){
+        document.getElementById('adminArea').style.display = '';
+      } else {
+        alert('Clave incorrecta');
+      }
+    });
+
+    document.getElementById('exportJson').addEventListener('click', ()=>{
+      const a = loadAsignaciones();
+      const pre = document.getElementById('exportBox');
+      pre.style.display = '';
+      pre.textContent = JSON.stringify(a, null, 2);
+    });
+
+    document.getElementById('resetAll').addEventListener('click', ()=>{
+      if(!confirm('¿Seguro que quieres borrar todas las asignaciones? Esta acción no se puede deshacer.')) return;
+      localStorage.removeItem(STORAGE_KEY);
+      alert('Asignaciones borradas.');
+      document.getElementById('exportBox').style.display = 'none';
+    });
+
+    // OPTIONAL: prefill input if user opens url with ?name=...
+    (function(){
+      const params = new URLSearchParams(location.search);
+      if(params.get('name')){
+        document.getElementById('nombre').value = params.get('name');
+      }
+    })();
+  </script>
+</body>
+</html>
